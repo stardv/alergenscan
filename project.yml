@@ -1,0 +1,36 @@
+name: AlergenScan
+
+options:
+  bundleIdPrefix: com.alergenscan
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  AllergenEngine:
+    path: Engine
+
+targets:
+  AlergenScan:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+    dependencies:
+      - package: AllergenEngine
+        product: AllergenEngine
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alergenscan.app
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"       # iPhone only
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: AlergenScan
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        # Required: iOS kills the app on camera access without this string.
+        INFOPLIST_KEY_NSCameraUsageDescription: >-
+          AlergenScan uses the camera to read ingredient lists and barcodes
+          on food packaging. Photos are processed on your phone and are
+          never uploaded or stored.
