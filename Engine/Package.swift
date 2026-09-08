@@ -9,6 +9,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "AllergenEngine"),
-        .executableTarget(name: "Validate", dependencies: ["AllergenEngine"])
+        .executableTarget(name: "Validate", dependencies: ["AllergenEngine"]),
+        .executableTarget(name: "Check", dependencies: ["AllergenEngine"])
     ]
 )
