@@ -1,6 +1,7 @@
 # Where this stands
 
-Last worked on: 7 September 2026. Paused to upgrade macOS.
+Last worked on: 9 September 2026. Building, signed, and installed on
+the phone. Not yet tested against real food.
 
 ## The goal
 
@@ -31,53 +32,60 @@ swift run --package-path Engine Check --only milk,eggs "..."   # custom profile
 
 Both were confirmed working against the live Open Food Facts API.
 
+**The app** (`App/`) compiles clean — no errors, no warnings — for both the
+simulator and the device, and is installed on Dmitry's iPhone (iPhone 16 Pro,
+iOS 26.6.1). It launches and the Allergens tab works. It has an icon.
+
 ## What is NOT verified
 
-**`App/` has never been compiled.** Xcode was not installed on this machine —
-only Command Line Tools, so there was no iOS SDK to build against. The nine
-Swift files pass `swiftc -parse`, which catches syntax errors but not type
-errors.
+**Nothing has been tested against real packaging yet.** The app builds, signs,
+installs and launches on hardware, and the engine's 49 checks pass — but no
+actual food has been scanned. Everything below the camera is exercised only by
+synthetic input.
 
-**Expect the first build to fail with a list of errors.** That is anticipated,
-not a sign the design is wrong. Work through them; the shapes most likely to
-need fixing are the AVFoundation capture delegate, the `@MainActor` isolation
-in `CameraController`, and SwiftUI API details in `ScanView` / `ResultView`.
+Specifically unverified:
 
-## Pick up here
+- **OCR quality on real labels.** Small print, curved packets, foil, low light.
+- **The readiness thresholds** in `FrameAnalyzer` (4 lines / 40 characters /
+  0.3 confidence). Picked by reasoning, not tuned against real packets. If the
+  button lights up on a brand name, raise them; if it never lights up on a
+  genuine ingredients list, lower them.
+- **Whether Open Food Facts actually covers the food in this house.** See the
+  country question below.
 
-1. **Install Xcode.** On macOS 15.6.1 the ceiling was **Xcode 26.3** (26.4+
-   requires macOS Tahoe 26.2). After upgrading macOS, take the current Xcode
-   from the App Store instead — the version constraint goes away.
+## Building it
 
-   ```bash
-   sudo xcode-select -s /Applications/Xcode.app
-   xcodebuild -version
-   ```
+Xcode 26.6 is at `/Applications/Xcode.app`. The iOS 26.5 platform is
+installed. Signing is set up: free personal team `A8XUB34269`, pinned in
+`project.yml`, so `xcodegen generate` never loses it.
 
-2. **Generate the project and open it.**
+Everything runs from the command line — no need to drive the Xcode UI:
 
-   ```bash
-   brew install xcodegen
-   cd /Users/Dima/code/alergenscan
-   xcodegen generate          # AlergenScan.xcodeproj is generated, not committed
-   open AlergenScan.xcodeproj
-   ```
+```bash
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+xcodegen generate                      # after any project.yml change
 
-3. **Set signing.** Xcode → Settings → Accounts → add Apple ID. Then target
-   `AlergenScan` → Signing & Capabilities → Team. If the bundle ID collides,
-   change `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml` and re-run `xcodegen
-   generate` — never edit the `.xcodeproj` directly, it is regenerated.
+# simulator (no camera — Allergens tab and "Enter barcode" only)
+xcodebuild -project AlergenScan.xcodeproj -scheme AlergenScan \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 
-4. **Fix the first build.** See above.
+# the phone
+xcodebuild -project AlergenScan.xcodeproj -scheme AlergenScan \
+  -destination 'id=86BADED2-A859-51BB-B550-BD5B2F00DA51' \
+  -allowProvisioningUpdates build
+xcrun devicectl device install app --device 86BADED2-A859-51BB-B550-BD5B2F00DA51 \
+  <path to built AlergenScan.app>
+```
 
-5. **Test on a real iPhone.** The simulator has **no camera**, so OCR and
-   barcode scanning cannot be tested there at all. The simulator does exercise
-   the Allergens tab and the "Enter barcode" path. Everything else needs
-   hardware and iOS 16+.
+The phone must be **unlocked** to launch, and Developer Mode is already on.
+**Builds expire after 7 days** — free account. Reinstall with the two commands
+above. Ticking "Connect via network" in Xcode's Devices window makes that work
+over Wi-Fi without the cable.
 
-   A free Apple ID works but the app expires off the phone every 7 days.
+The app icon is generated, not hand-drawn: `python3 Tools/make_icon.py` writes
+straight into the asset catalog. Edit the script, not the PNG.
 
-### What to try once it runs
+## What to try — none of this is done yet
 
 | Case | Expected |
 |---|---|

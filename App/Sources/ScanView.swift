@@ -18,7 +18,7 @@ struct ScanView: View {
             .navigationTitle("Scan")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Enter barcode") { showManualEntry = true }
                 }
             }
@@ -41,12 +41,19 @@ struct ScanView: View {
         case .granted:
             CameraPreview(session: camera.session).ignoresSafeArea()
         case .denied:
-            ContentUnavailableView(
-                "Camera access needed",
-                systemImage: "camera.fill",
-                description: Text("Allow camera access in Settings so the app can read "
-                                  + "ingredient labels and barcodes.")
-            )
+            VStack(spacing: 12) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.secondary)
+                Text("Camera access needed")
+                    .font(.title3.weight(.semibold))
+                Text("Allow camera access in Settings so the app can read "
+                     + "ingredient labels and barcodes.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(32)
         case .unknown:
             Color.black.ignoresSafeArea()
         }
@@ -70,27 +77,45 @@ struct ScanView: View {
     }
 
     private var instructions: some View {
-        Text(profile.isEmpty
-             ? "Pick your allergens on the Allergens tab first."
-             : "Point at the ingredients list, or the barcode.")
-            .font(.subheadline)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(.black.opacity(0.55), in: Capsule())
+        HStack(spacing: 8) {
+            if camera.access == .granted && !profile.isEmpty {
+                Circle()
+                    .fill(camera.readiness.isReady ? Color.green : Color.white.opacity(0.5))
+                    .frame(width: 9, height: 9)
+            }
+            Text(profile.isEmpty
+                 ? "Pick your allergens on the Allergens tab first."
+                 : camera.readiness.message)
+        }
+        .font(.subheadline)
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.55), in: Capsule())
+        .animation(.easeInOut(duration: 0.2), value: camera.readiness)
+    }
+
+    /// The button waits for the camera to actually resolve something readable.
+    /// `allowsOverride` is the escape hatch: after a few seconds of nothing,
+    /// scanning is allowed anyway rather than leaving a button that never
+    /// works — an unreadable frame is answered with "Couldn't check this".
+    private var canScan: Bool {
+        !profile.isEmpty && camera.access == .granted
+            && (camera.readiness.isReady || camera.allowsOverride)
     }
 
     private var scanButton: some View {
         Button {
             Task { await scanner.scan(using: camera, profile: profile.selected) }
         } label: {
-            Text("Scan")
+            Text(camera.readiness.isReady ? "Scan" : "Scan anyway")
                 .font(.title3.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
         }
         .buttonStyle(.borderedProminent)
-        .disabled(profile.isEmpty || camera.access != .granted)
+        .disabled(!canScan)
+        .animation(.easeInOut(duration: 0.2), value: canScan)
     }
 
     private func progress(_ message: String) -> some View {

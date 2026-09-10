@@ -16,16 +16,23 @@ targets:
     platform: iOS
     sources:
       - path: App/Sources
+      - path: App/Resources
     dependencies:
       - package: AllergenEngine
         product: AllergenEngine
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.alergenscan.app
+        # Free personal team. Builds expire off the phone after 7 days.
+        DEVELOPMENT_TEAM: A8XUB34269
+        CODE_SIGN_STYLE: Automatic
+        # Pinned: the app and the engine are written for Swift 5 language mode.
+        SWIFT_VERSION: "5"
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"       # iPhone only
         GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: AlergenScan
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait

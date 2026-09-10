@@ -10,6 +10,8 @@ Package.resolved
 
 # Xcode
 DerivedData/
+# xcodebuild's default output dir when -derivedDataPath is omitted
+build/
 xcuserdata/
 *.xcuserstate
 
