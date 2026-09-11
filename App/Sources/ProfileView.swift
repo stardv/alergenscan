@@ -58,6 +58,13 @@ struct ProfileView: View {
                          + "are different allergens — peanuts are legumes. The "
                          + "default watches both.")
                 }
+
+                Section {
+                    LabeledContent("Version", value: AppVersion.display)
+                } footer: {
+                    Text("Quote this when something reads wrong, so the packet "
+                         + "can be checked against the build that read it.")
+                }
             }
             .navigationTitle("Allergens")
         }
