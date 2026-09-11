@@ -419,6 +419,122 @@ final class AllergenEngineTests {
         XCTAssertNil(treeOnly[.peanuts])
     }
 
+    // MARK: - Ingredients classifier
+
+    func testRealIngredientLabelScoresAsLabel() {
+        let text = "Ingredients: sugar, palm oil, hazelnuts 13%, cocoa powder 7.4%, skimmed milk powder 6.6%, whey powder, emulsifier: lecithins (soy), vanillin."
+        let result = IngredientsClassifier.classify(text)
+        XCTAssertTrue(result.looksLikeLabel, "a real label must score as a label (score: \(result.score))")
+    }
+
+    func testFrenchLabelScoresAsLabel() {
+        let text = "Ingrédients: sucre, huile de palme, NOISETTES 13%, cacao maigre 7,4%, LAIT écrémé en poudre 6,6%, LACTOSÉRUM en poudre, émulsifiants: lécithines (SOJA), vanilline."
+        let result = IngredientsClassifier.classify(text)
+        XCTAssertTrue(result.looksLikeLabel, "a French label must score as a label (score: \(result.score))")
+    }
+
+    func testGermanLabelScoresAsLabel() {
+        let text = "Zutaten: Weizenmehl, Zucker, Vollmilchpulver, Haselnüsse, Hühnerei, Sojalecithin, E471, Salz."
+        let result = IngredientsClassifier.classify(text)
+        XCTAssertTrue(result.looksLikeLabel, "a German label must score as a label (score: \(result.score))")
+    }
+
+    func testNovelTextDoesNotScoreAsLabel() {
+        let text = "It was a bright cold day in April and the clocks were striking thirteen. Winston Smith his chin nuzzled into his breast in an effort to escape the vile wind slipped quickly through the glass doors of Victory Mansions though not quickly enough to prevent a swirl of gritty dust from entering along with him."
+        let result = IngredientsClassifier.classify(text)
+        XCTAssertFalse(result.looksLikeLabel, "a novel page must not score as a label (score: \(result.score))")
+    }
+
+    func testMenuTextDoesNotScoreAsLabel() {
+        let text = "Grilled salmon with seasonal vegetables and rice pilaf. Pan-seared duck breast with cherry reduction. Chocolate fondant with vanilla ice cream. House salad with balsamic vinaigrette."
+        let result = IngredientsClassifier.classify(text)
+        XCTAssertFalse(result.looksLikeLabel, "a menu must not score as a label (score: \(result.score))")
+    }
+
+    func testPosterTextDoesNotScoreAsLabel() {
+        let text = "SUMMER FESTIVAL 2025 Live Music Food Drinks Family Fun July 15-17 City Park Free Entry"
+        let result = IngredientsClassifier.classify(text)
+        XCTAssertFalse(result.looksLikeLabel, "a poster must not score as a label (score: \(result.score))")
+    }
+
+    func testEmptyTextDoesNotScoreAsLabel() {
+        let result = IngredientsClassifier.classify("")
+        XCTAssertFalse(result.looksLikeLabel, "empty text must not be a label")
+    }
+
+    func testFailSafeNonLabelTextBecomesInconclusive() {
+        // Non-label text with no allergens found: must be inconclusive.
+        let label = SourceReading(
+            source: .label,
+            findings: engine.analyze(labelText: "The quick brown fox jumps over the lazy dog")
+        )
+        let result = engine.combine(
+            readings: [label],
+            profile: [.milk, .gluten],
+            labelText: "The quick brown fox jumps over the lazy dog"
+        )
+        XCTAssertTrue(result.isInconclusive,
+                      "non-label text with no allergens must be inconclusive, not all-clear")
+        XCTAssertEqual(result.headline, .couldNotCheck)
+    }
+
+    func testFailSafeNonLabelTextStillFlagsAllergens() {
+        // Non-label text BUT it happens to mention an allergen: must still flag it.
+        let label = SourceReading(
+            source: .label,
+            findings: engine.analyze(labelText: "The butter was fresh from the farm")
+        )
+        let result = engine.combine(
+            readings: [label],
+            profile: [.milk],
+            labelText: "The butter was fresh from the farm"
+        )
+        XCTAssertFalse(result.isInconclusive,
+                       "allergens found in non-label text must still be flagged")
+        XCTAssertEqual(result.findings.first(where: { $0.allergen == .milk })?.status, .contains)
+    }
+
+    func testClassifierNeverTurnsRedToGreen() {
+        // Even with low classifier confidence, allergens found must be reported.
+        let label = SourceReading(
+            source: .label,
+            findings: [.peanuts: (.contains, ["peanut"])]
+        )
+        let result = engine.combine(
+            readings: [label],
+            profile: [.peanuts],
+            labelText: "Random text about peanut processing"
+        )
+        XCTAssertEqual(result.findings.first?.status, .contains,
+                       "classifier must never suppress an allergen hit")
+    }
+
+    func testDatabaseSourcePreventsInconclusiveOnNonLabelText() {
+        // If we have a database source, non-label OCR text shouldn't make it inconclusive.
+        let label = SourceReading(source: .label, findings: [:])
+        let db = SourceReading(source: .database, findings: [:])
+        let result = engine.combine(
+            readings: [label, db],
+            profile: [.milk],
+            labelText: "Some random text that is not a label"
+        )
+        XCTAssertFalse(result.isInconclusive,
+                       "database source should prevent inconclusive even with non-label OCR text")
+    }
+
+    func testIngredientsTextsArePassedThrough() {
+        let label = SourceReading(source: .label, findings: [:])
+        let result = engine.combine(
+            readings: [label],
+            profile: [.milk],
+            labelText: "Ingredients: sugar, salt",
+            databaseText: "Sugar, wheat flour, milk"
+        )
+        XCTAssertEqual(result.ingredientsTexts.count, 2)
+        XCTAssertEqual(result.ingredientsTexts[0].source, .label)
+        XCTAssertEqual(result.ingredientsTexts[1].source, .database)
+    }
+
     // Explicit registry — no XCTest runtime here to discover these for us.
     lazy var allTests: [(String, () throws -> Void)] = [
         ("testDetectsMilkFromDerivativesThatNeverSayMilk", testDetectsMilkFromDerivativesThatNeverSayMilk),
@@ -469,6 +585,18 @@ final class AllergenEngineTests {
         ("testPeanutDerivativesThatDoNotSayPeanut", testPeanutDerivativesThatDoNotSayPeanut),
         ("testEggDerivativesThatDoNotSayEgg", testEggDerivativesThatDoNotSayEgg),
         ("testNutAndEggAcrossEuropeanLanguages", testNutAndEggAcrossEuropeanLanguages),
-        ("testPeanutAndTreeNutStayDistinct", testPeanutAndTreeNutStayDistinct)
+        ("testPeanutAndTreeNutStayDistinct", testPeanutAndTreeNutStayDistinct),
+        ("testRealIngredientLabelScoresAsLabel", testRealIngredientLabelScoresAsLabel),
+        ("testFrenchLabelScoresAsLabel", testFrenchLabelScoresAsLabel),
+        ("testGermanLabelScoresAsLabel", testGermanLabelScoresAsLabel),
+        ("testNovelTextDoesNotScoreAsLabel", testNovelTextDoesNotScoreAsLabel),
+        ("testMenuTextDoesNotScoreAsLabel", testMenuTextDoesNotScoreAsLabel),
+        ("testPosterTextDoesNotScoreAsLabel", testPosterTextDoesNotScoreAsLabel),
+        ("testEmptyTextDoesNotScoreAsLabel", testEmptyTextDoesNotScoreAsLabel),
+        ("testFailSafeNonLabelTextBecomesInconclusive", testFailSafeNonLabelTextBecomesInconclusive),
+        ("testFailSafeNonLabelTextStillFlagsAllergens", testFailSafeNonLabelTextStillFlagsAllergens),
+        ("testClassifierNeverTurnsRedToGreen", testClassifierNeverTurnsRedToGreen),
+        ("testDatabaseSourcePreventsInconclusiveOnNonLabelText", testDatabaseSourcePreventsInconclusiveOnNonLabelText),
+        ("testIngredientsTextsArePassedThrough", testIngredientsTextsArePassedThrough),
     ]
 }

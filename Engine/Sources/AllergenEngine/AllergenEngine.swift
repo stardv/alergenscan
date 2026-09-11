@@ -115,8 +115,17 @@ public struct AllergenEngine {
 
     /// Merge every source into one result, taking the most cautious status per
     /// allergen. Only allergens in `profile` are reported.
+    ///
+    /// When `labelText` is provided, the ingredients classifier scores whether
+    /// it actually looks like a label. If it doesn't AND no allergens were
+    /// found, the result becomes inconclusive (fail-safe). If allergens WERE
+    /// found, they are still reported — the classifier can only make results
+    /// more cautious, never less.
     public func combine(readings: [SourceReading],
-                        profile: Set<Allergen>) -> ScanResult {
+                        profile: Set<Allergen>,
+                        labelText: String? = nil,
+                        databaseText: String? = nil,
+                        productName: String? = nil) -> ScanResult {
 
         let usable = readings.filter { $0.findings != nil }
         guard !usable.isEmpty else {
@@ -163,10 +172,44 @@ public struct AllergenEngine {
                 return $0.allergen.displayName < $1.allergen.displayName
             }
 
+        // Run the ingredients classifier on label text.
+        let classification = labelText.map { IngredientsClassifier.classify($0) }
+        let hasDatabase = readings.contains { $0.source == .database && $0.findings != nil }
+        let hasAnyAllergens = findings.contains { $0.status != .notDetected }
+
+        // FAIL-SAFE: If the label text doesn't look like ingredients, AND we
+        // have no database source, AND no allergens were found, mark as
+        // inconclusive. This prevents "None of your allergens found" on a
+        // photo of a novel page. But if allergens WERE found, keep them —
+        // the classifier never suppresses a hit.
+        let isInconclusive: Bool
+        if let classification, !classification.looksLikeLabel, !hasDatabase, !hasAnyAllergens {
+            isInconclusive = true
+        } else {
+            isInconclusive = false
+        }
+
+        // Collect raw ingredient texts for display.
+        var ingredientsTexts: [IngredientsText] = []
+        if let text = labelText, !text.isEmpty {
+            ingredientsTexts.append(IngredientsText(source: .label, text: text))
+        }
+        if let text = databaseText, !text.isEmpty {
+            ingredientsTexts.append(IngredientsText(source: .database, text: text))
+        }
+
+        // Product name: prefer the one passed in (from barcode/OFF), fall
+        // back to a best-guess from label text (display only).
+        let resolvedName = productName
+            ?? labelText.flatMap { IngredientsClassifier.guessProductName(from: $0) }
+
         return ScanResult(
             findings: findings,
             sourcesConsulted: usable.map(\.source),
-            isInconclusive: false
+            isInconclusive: isInconclusive,
+            ingredientsTexts: ingredientsTexts,
+            productName: resolvedName,
+            labelConfidence: classification?.score
         )
     }
 

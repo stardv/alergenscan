@@ -18,8 +18,10 @@ struct ResultView: View {
                 VStack(spacing: 20) {
                     banner
                     if let product { productSummary(product) }
+                    else if let name = result.productName { labelProductName(name) }
                     if !result.flagged.isEmpty { flaggedList }
                     clearList
+                    ingredientsTextSection
                     provenance
                     disclaimer
                 }
@@ -177,6 +179,42 @@ struct ResultView: View {
         }
         .padding()
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func labelProductName(_ name: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(name).font(.headline)
+            Text("Guessed from label text")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var ingredientsTextSection: some View {
+        let texts = result.ingredientsTexts
+        return Group {
+            if !texts.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Ingredients text").font(.headline)
+                    ForEach(Array(texts.enumerated()), id: \.offset) { _, item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.source == .label ? "From the label" : "From Open Food Facts")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(item.text)
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                        }
+                        .padding()
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 
     private var provenance: some View {

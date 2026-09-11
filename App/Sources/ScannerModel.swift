@@ -73,8 +73,13 @@ final class ScannerModel: ObservableObject {
             }
         }
 
-        let result = engine.combine(readings: [labelReading, databaseReading],
-                                    profile: profile)
+        let result = engine.combine(
+            readings: [labelReading, databaseReading],
+            profile: profile,
+            labelText: frame.hasText ? frame.text : nil,
+            databaseText: product?.ingredientsText,
+            productName: product?.displayName.isEmpty == false ? product?.displayName : nil
+        )
         state = .done(result, product)
     }
 
@@ -91,7 +96,12 @@ final class ScannerModel: ObservableObject {
             let fetched = try await off.fetch(barcode: barcode)
             let reading = SourceReading(source: .database,
                                         findings: engine.analyze(product: fetched))
-            let result = engine.combine(readings: [reading], profile: profile)
+            let result = engine.combine(
+                readings: [reading],
+                profile: profile,
+                databaseText: fetched.ingredientsText,
+                productName: fetched.displayName.isEmpty ? nil : fetched.displayName
+            )
             state = .done(result, fetched)
         } catch {
             state = .failed((error as? OFFError)?.errorDescription

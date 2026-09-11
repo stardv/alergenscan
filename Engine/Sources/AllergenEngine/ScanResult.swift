@@ -63,6 +63,17 @@ public struct SourceReading: Sendable {
     }
 }
 
+/// Raw text from one evidence source, for display on the result screen.
+public struct IngredientsText: Sendable {
+    public let source: EvidenceSource
+    public let text: String
+
+    public init(source: EvidenceSource, text: String) {
+        self.source = source
+        self.text = text
+    }
+}
+
 /// The combined answer shown to the user.
 public struct ScanResult: Sendable {
     /// One entry per allergen in the user's profile, worst-first.
@@ -72,13 +83,25 @@ public struct ScanResult: Sendable {
     /// True when no source could be read at all. The UI must say "could not
     /// check" rather than showing a reassuring all-clear.
     public let isInconclusive: Bool
+    /// Raw ingredients text from each source, for display.
+    public let ingredientsTexts: [IngredientsText]
+    /// Product name from barcode lookup or best-guess from label.
+    public let productName: String?
+    /// How confident we are that the scanned text is actually a label.
+    public let labelConfidence: Double?
 
     public init(findings: [AllergenFinding],
                 sourcesConsulted: [EvidenceSource],
-                isInconclusive: Bool) {
+                isInconclusive: Bool,
+                ingredientsTexts: [IngredientsText] = [],
+                productName: String? = nil,
+                labelConfidence: Double? = nil) {
         self.findings = findings
         self.sourcesConsulted = sourcesConsulted
         self.isInconclusive = isInconclusive
+        self.ingredientsTexts = ingredientsTexts
+        self.productName = productName
+        self.labelConfidence = labelConfidence
     }
 
     /// Anything the user needs to react to.
