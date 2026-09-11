@@ -457,6 +457,37 @@ final class AllergenEngineTests {
         XCTAssertFalse(result.looksLikeLabel, "a poster must not score as a label (score: \(result.score))")
     }
 
+    func testPlainIngredientListWithoutHeaderScoresAsLabel() {
+        // The header is the first thing to fall outside the frame, and a
+        // product with no allergens in it has nothing for the dictionary to
+        // match. This still has to read as a label, or a legible packet comes
+        // back as "Couldn't check this".
+        let text = "water, sugar, salt, citric acid, natural flavouring, colour"
+        let result = IngredientsClassifier.classify(text)
+        XCTAssertTrue(result.looksLikeLabel,
+                      "a header-less ingredient list must score as a label (score: \(result.score))")
+    }
+
+    func testProseWithCommasStillDoesNotScoreAsLabel() {
+        // Guards the signal above: commas alone must not be enough.
+        let text = "She paused, considered the question, and decided, after some thought, that the answer was no, though she could not say why, and the afternoon wore on."
+        let result = IngredientsClassifier.classify(text)
+        XCTAssertFalse(result.looksLikeLabel,
+                       "comma-heavy prose must not score as a label (score: \(result.score))")
+    }
+
+    func testProductNameGuessedWithoutIngredientsHeader() {
+        let text = "Choco Hazelnut Spread\n400g\nwater, sugar, hazelnuts, cocoa"
+        XCTAssertEqual(IngredientsClassifier.guessProductName(from: text),
+                       "Choco Hazelnut Spread")
+    }
+
+    func testProductNameGuessSkipsTheIngredientLineItself() {
+        let text = "water, sugar, salt, citric acid, natural flavouring, colour"
+        XCTAssertNil(IngredientsClassifier.guessProductName(from: text),
+                     "a bare ingredient list has no product name to offer")
+    }
+
     func testEmptyTextDoesNotScoreAsLabel() {
         let result = IngredientsClassifier.classify("")
         XCTAssertFalse(result.looksLikeLabel, "empty text must not be a label")
@@ -592,6 +623,10 @@ final class AllergenEngineTests {
         ("testNovelTextDoesNotScoreAsLabel", testNovelTextDoesNotScoreAsLabel),
         ("testMenuTextDoesNotScoreAsLabel", testMenuTextDoesNotScoreAsLabel),
         ("testPosterTextDoesNotScoreAsLabel", testPosterTextDoesNotScoreAsLabel),
+        ("testPlainIngredientListWithoutHeaderScoresAsLabel", testPlainIngredientListWithoutHeaderScoresAsLabel),
+        ("testProseWithCommasStillDoesNotScoreAsLabel", testProseWithCommasStillDoesNotScoreAsLabel),
+        ("testProductNameGuessedWithoutIngredientsHeader", testProductNameGuessedWithoutIngredientsHeader),
+        ("testProductNameGuessSkipsTheIngredientLineItself", testProductNameGuessSkipsTheIngredientLineItself),
         ("testEmptyTextDoesNotScoreAsLabel", testEmptyTextDoesNotScoreAsLabel),
         ("testFailSafeNonLabelTextBecomesInconclusive", testFailSafeNonLabelTextBecomesInconclusive),
         ("testFailSafeNonLabelTextStillFlagsAllergens", testFailSafeNonLabelTextStillFlagsAllergens),

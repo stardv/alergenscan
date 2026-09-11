@@ -55,17 +55,6 @@ public enum IngredientsClassifier {
         "koostumus",        // Estonian
     ]
 
-    /// "Ingrédients" needs special handling because TextNormalizer folds
-    /// accents, so we match the folded form above. But we also want to catch
-    /// "INGRÉDIENTS:" as a header via prefix matching on the raw text.
-    private static let ingredientsHeaderPrefixes: [String] = [
-        "ingredients",
-        "ingredientes",
-        "ingredienti",
-        "ingredienten",
-        "zutaten",
-    ]
-
     // MARK: - Contains / may contain markers
 
     private static let containsMarkers: [[String]] = [
@@ -139,6 +128,17 @@ public enum IngredientsClassifier {
             score += 0.05
         }
 
+        // Signal 7: list structure (0.15)
+        // A run of short comma-separated segments is the shape of an
+        // ingredients list even when none of the words are recognisable —
+        // "water, sugar, salt, citric acid, natural flavouring, colour".
+        // Without this, a plain product containing no allergens at all reads
+        // as unreadable and the user is told "Couldn't check this" for a food
+        // that was perfectly legible.
+        if hasListStructure(text) {
+            score += 0.15
+        }
+
         return Classification(score: min(score, 1.0))
     }
 
@@ -179,7 +179,17 @@ public enum IngredientsClassifier {
                 break
             }
         }
-        return nil
+
+        // No header found. Fall back to the first line that reads like a name
+        // rather than a list or a net weight — the brand is usually the
+        // largest text on the packet and lands first in OCR order. Display
+        // only, so a wrong guess costs nothing but a line of text.
+        return lines.first { candidate in
+            candidate.count >= 2 && candidate.count <= 80
+                && !candidate.contains(",")
+                && candidate.contains(where: { $0.isLetter })
+                && candidate.filter(\.isNumber).count * 2 < candidate.count
+        }
     }
 
     // MARK: - Signal helpers
@@ -224,6 +234,48 @@ public enum IngredientsClassifier {
         if ratio >= 0.08 { return 0.5 }
         if ratio >= 0.03 { return 0.2 }
         return 0
+    }
+
+    /// Words that carry grammar rather than content. An ingredients list is
+    /// almost entirely nouns; prose is roughly a third function words. This is
+    /// what separates "water, sugar, salt, citric acid" from "She paused,
+    /// considered the question, and decided, after some thought, that...".
+    ///
+    /// English-leaning by design: the ambiguous short words of other languages
+    /// ("de", "la", "e", "il") appear in genuine ingredient lists — "huile de
+    /// palme", "farine de blé" — so penalising them would misfire on exactly
+    /// the non-English labels this app must not lose.
+    private static let functionWords: Set<String> = [
+        "the", "a", "an", "and", "or", "of", "to", "in", "is", "was", "were",
+        "that", "this", "it", "he", "she", "they", "we", "you", "i", "me",
+        "him", "her", "his", "their", "our", "your", "my", "them", "with",
+        "for", "but", "not", "on", "at", "as", "by", "from", "had", "have",
+        "has", "be", "been", "which", "who", "what", "when", "where", "why",
+        "how", "could", "would", "should", "will", "said", "though", "after",
+        "some", "no", "into", "through", "about", "over", "then", "than",
+    ]
+
+    /// At least five comma-separated segments, most of them short, and hardly
+    /// any grammar. Menus fail on the comma count; comma-heavy prose fails on
+    /// the function words.
+    private static func hasListStructure(_ text: String) -> Bool {
+        let segments = text.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard segments.count >= 5 else { return false }
+
+        let short = segments.filter {
+            $0.split(whereSeparator: { $0.isWhitespace }).count <= 5
+        }
+        guard Double(short.count) / Double(segments.count) >= 0.7 else { return false }
+
+        let words = TextNormalizer.normalize(text)
+            .split(separator: " ")
+            .map(String.init)
+        guard !words.isEmpty else { return false }
+
+        let grammar = words.filter { functionWords.contains($0) }.count
+        return Double(grammar) / Double(words.count) < 0.15
     }
 
     private static func hasENumbers(_ text: String) -> Bool {
